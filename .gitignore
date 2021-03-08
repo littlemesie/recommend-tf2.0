@@ -125,5 +125,18 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
+.mypy_cache/git
+.idea/
+runs/
+.DS_Store
+.csv
+.h5
+data/
+graphs/
+model/
+result/
+ckpt/
+fig/
+
 # Pyre type checker
 .pyre/
