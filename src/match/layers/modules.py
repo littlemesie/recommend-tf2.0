@@ -25,12 +25,13 @@ class DNN(Layer):
 
 class SampledSoftmaxLayer(Layer):
     """Sampled Softmax Layer"""
-    def __init__(self, num_classes, num_sampled=5, **kwargs):
+    def __init__(self, num_sampled=5, **kwargs):
         super(SampledSoftmaxLayer, self).__init__(**kwargs)
         self.num_sampled = num_sampled
-        self.size = num_classes
 
     def build(self, input_shape):
+        print(input_shape[0][1])
+        self.size = input_shape[0][1]
         self.zero_bias = self.add_weight(shape=[self.size],
                                          initializer=Zeros,
                                          dtype=tf.float32,
@@ -44,12 +45,15 @@ class SampledSoftmaxLayer(Layer):
         target (i.e., a repeat of the training data) to compute the labels
         argument
         """
-        embeddings, inputs, label_idx = inputs_with_label_idx
-
-        loss = tf.nn.sampled_softmax_loss(weights=embeddings,  # self.item_embedding.
+        item_embeddings, user_embeddings, label_idx = inputs_with_label_idx
+        print(tf.transpose(item_embeddings))
+        print(tf.transpose(user_embeddings))
+        print(label_idx)
+        print(self.zero_bias)
+        loss = tf.nn.sampled_softmax_loss(weights=tf.transpose(item_embeddings),  # self.item_embedding.
                                           biases=self.zero_bias,
                                           labels=label_idx,
-                                          inputs=inputs,
+                                          inputs=tf.transpose(user_embeddings),
                                           num_sampled=self.num_sampled,
                                           num_classes=self.size,  # self.target_song_size
                                           )
