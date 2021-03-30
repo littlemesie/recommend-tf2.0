@@ -55,5 +55,12 @@ if __name__ == '__main__':
         batch_size=batch_size,
         validation_split=0.1
     )
+
+    # user_embs, item_embed = model.predict(
+    #     train_X,
+    #     batch_size=batch_size
+    # )
+    # print(item_embed)
+    # print(item_embed.shape)
     # ===========================Test==============================
     # print('test AUC: %f' % model.evaluate(test_X, test_y, batch_size=batch_size)[1])

@@ -30,7 +30,6 @@ class SampledSoftmaxLayer(Layer):
         self.num_sampled = num_sampled
 
     def build(self, input_shape):
-        print(input_shape[0][1])
         self.size = input_shape[0][1]
         self.zero_bias = self.add_weight(shape=[self.size],
                                          initializer=Zeros,
@@ -46,14 +45,15 @@ class SampledSoftmaxLayer(Layer):
         argument
         """
         item_embeddings, user_embeddings, label_idx = inputs_with_label_idx
-        print(tf.transpose(item_embeddings))
-        print(tf.transpose(user_embeddings))
-        print(label_idx)
-        print(self.zero_bias)
-        loss = tf.nn.sampled_softmax_loss(weights=tf.transpose(item_embeddings),  # self.item_embedding.
+        item_embeddings = tf.squeeze(item_embeddings, axis=1)  # (None, len)
+        # item_embeddings = tf.transpose(item_embeddings)
+        user_embeddings = tf.squeeze(user_embeddings, axis=1)  # (None, len)
+        print('bias: ', self.zero_bias)
+        print(item_embeddings, user_embeddings)
+        loss = tf.nn.sampled_softmax_loss(weights=item_embeddings,  # self.item_embedding.
                                           biases=self.zero_bias,
                                           labels=label_idx,
-                                          inputs=tf.transpose(user_embeddings),
+                                          inputs=user_embeddings,
                                           num_sampled=self.num_sampled,
                                           num_classes=self.size,  # self.target_song_size
                                           )

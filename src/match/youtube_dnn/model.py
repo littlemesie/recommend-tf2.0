@@ -8,76 +8,56 @@ from match.layers.modules import DNN, SampledSoftmaxLayer
 class YoutubeDNN(Model):
 
     def __init__(self, user_sparse_feature_columns, item_sparse_feature_columns, user_dense_feature_columns=(),
-                 item_dense_feature_columns=(), num_sampled=5,
+                 item_dense_feature_columns=(), num_sampled=1,
                  user_dnn_hidden_units=(64, 32), item_dnn_hidden_units=(64, 32), dnn_activation='relu',
                l2_reg_embedding=1e-6, dnn_dropout=0, **kwargs):
         super(YoutubeDNN, self).__init__(**kwargs)
         self.num_sampled = num_sampled
-        self.size = 1682
         self.user_sparse_feature_columns = user_sparse_feature_columns
         self.user_dense_feature_columns = user_dense_feature_columns
         self.item_sparse_feature_columns = item_sparse_feature_columns
         self.item_dense_feature_columns = item_dense_feature_columns
 
         self.user_embed_layers = {
-            'embed_' + str(i): Embedding(input_dim=feat['feat_num'],
+            'embed_' + str(feat['feat']): Embedding(input_dim=feat['feat_num'],
                                          input_length=feat['feat_len'],
                                          output_dim=feat['embed_dim'],
                                          embeddings_initializer='random_uniform',
                                          embeddings_regularizer=l2(l2_reg_embedding))
-            for i, feat in enumerate(self.user_sparse_feature_columns)
+            for feat in self.user_sparse_feature_columns
         }
 
         self.item_embed_layers = {
-            'embed_' + str(i): Embedding(input_dim=feat['feat_num'],
+            'embed_' + str(feat['feat']): Embedding(input_dim=feat['feat_num'],
                                          input_length=feat['feat_len'],
                                          output_dim=feat['embed_dim'],
                                          embeddings_initializer='random_uniform',
                                          embeddings_regularizer=l2(l2_reg_embedding))
-            for i, feat in enumerate(self.item_sparse_feature_columns)
+            for feat in self.item_sparse_feature_columns
         }
-
-        self.zero_bias = self.add_weight(shape=[self.size],
-                                         initializer=Zeros,
-                                         dtype=tf.float32,
-                                         trainable=False,
-                                         name="bias")
 
         self.user_dnn = DNN(user_dnn_hidden_units, dnn_activation, dnn_dropout)
         self.item_dnn = DNN(item_dnn_hidden_units, dnn_activation, dnn_dropout)
+        self.sampled_softmax = SampledSoftmaxLayer(num_sampled=self.num_sampled)
 
 
     def call(self, inputs, training=None, mask=None):
 
-        # user_sparse_inputs, user_dense_inputs, item_sparse_inputs, item_dense_inputs, labels = inputs
         user_sparse_inputs, item_sparse_inputs, labels = inputs
+        print(user_sparse_inputs, item_sparse_inputs)
+        user_sparse_embed = tf.concat([self.user_embed_layers['embed_{}'.format(k)](v)
+                                  for k, v in user_sparse_inputs.items()], axis=-1)
 
-        user_sparse_embed = tf.concat([self.user_embed_layers['embed_{}'.format(i)](user_sparse_inputs[:, i])
-                                  for i in range(user_sparse_inputs.shape[1])], axis=-1)
-
-        # user_dnn_input = tf.concat([user_sparse_embed, user_dense_inputs], axis=-1)
         user_dnn_input = user_sparse_embed
         user_dnn_out = self.user_dnn(user_dnn_input)
 
-        item_sparse_embed = tf.concat([self.item_embed_layers['embed_{}'.format(i)](item_sparse_inputs[:, i])
-                                       for i in range(item_sparse_inputs.shape[1])], axis=-1)
-
-        # item_dnn_input = tf.concat([item_sparse_embed, item_dense_inputs], axis=-1)
+        item_sparse_embed = tf.concat([self.item_embed_layers['embed_{}'.format(k)](v)
+                                       for k, v in item_sparse_inputs.items()], axis=-1)
         item_dnn_input = item_sparse_embed
         item_dnn_out = self.item_dnn(item_dnn_input)
-        print(item_dnn_out.shape)
-        #
-        # loss = tf.nn.sampled_softmax_loss(weights=item_dnn_out,  # self.item_embedding.
-        #                                   biases=self.zero_bias,
-        #                                   labels=labels,
-        #                                   inputs=user_dnn_out,
-        #                                   num_sampled=self.num_sampled,
-        #                                   num_classes=self.size,  # self.target_song_size
-        #                                   )
-        # output = tf.expand_dims(loss, axis=1)
 
-        output = SampledSoftmaxLayer(num_sampled=self.num_sampled)(
-            [item_dnn_out, user_dnn_out, labels])
+
+        output = self.sampled_softmax([item_dnn_out, user_dnn_out, labels])
 
         self.user_embed = user_dnn_out
         self.item_embed = item_dnn_out
@@ -85,18 +65,19 @@ class YoutubeDNN(Model):
         return output
 
     def summary(self, **kwargs):
-        user_sparse_inputs = Input(shape=(len(self.user_sparse_feature_columns), 80000), dtype=tf.float32)
-        # user_dense_inputs = Input(shape=(len(self.user_dense_feature_columns),), dtype=tf.int32)
-        item_sparse_inputs = Input(shape=(len(self.item_sparse_feature_columns), 80000), dtype=tf.float32)
-        # item_dense_inputs = Input(shape=(len(self.item_dense_feature_columns), ), dtype=tf.int32)
-        labels_inputs = Input(shape=(1,), dtype=tf.int32)
-        # Model(inputs=[user_sparse_inputs, user_dense_inputs, item_sparse_inputs, item_dense_inputs, labels_inputs],
-        #             outputs=self.call([user_sparse_inputs, user_dense_inputs, item_sparse_inputs, item_dense_inputs,
-        #                                labels_inputs])).summary()
 
-        Model(inputs=[user_sparse_inputs, item_sparse_inputs, labels_inputs],
+        user_sparse_inputs = {uf['feat']: Input(shape=(1, ), dtype=tf.float32) for uf in
+                              self.user_sparse_feature_columns}
+        item_sparse_inputs = {uf['feat']: Input(shape=(1, ), dtype=tf.float32) for uf in
+                              self.item_sparse_feature_columns}
+
+        labels_inputs = Input(shape=(1,), dtype=tf.int32)
+
+        model = Model(inputs=[user_sparse_inputs, item_sparse_inputs, labels_inputs],
               outputs=self.call([user_sparse_inputs, item_sparse_inputs,
-                                 labels_inputs])).summary()
+                                 labels_inputs]))
+        model.summary()
+
 
 # def test_model():
 #     user_features = [{'feat': 'user_id', 'feat_num': 100, 'feat_len': 1, 'embed_dim': 8}]

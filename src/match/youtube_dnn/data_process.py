@@ -60,19 +60,20 @@ def create_ml_100k_dataset(embed_dim=16):
     item_feat_cols = item_feat_cols + [sparseFeature(feat=mt, feat_num=feature_max_idx[mt]) for mt in movie_type]
 
     train, test = train_test_split(data_df, test_size=0.2)
-
-    train_X = [train[user_features].values.astype('int32'), train[movie_features].values.astype('int32'),
+    train_X = [{feat: train[feat].values for feat in user_features},
+               {feat: train[feat].values for feat in movie_features},
                train['label'].values.astype('int32')]
+    # train_X = [train[user_features].values.astype('int32'), train[movie_features].values.astype('int32'),
+    #            train['label'].values.astype('int32')]
     train_y = train['label'].values.astype('int32')
-
-    test_X = [test[user_features].values.astype('int32'), test[movie_features].values.astype('int32'),
+    test_X = [{feat: test[feat].values for feat in user_features},
+              {feat: test[feat].values for feat in movie_features},
               test['label'].values.astype('int32')]
+
+    # test_X = [test[user_features].values.astype('int32'), test[movie_features].values.astype('int32'),
+    #           test['label'].values.astype('int32')]
     test_y = test['label'].values.astype('int32')
-    print(user_feat_cols)
-
-    print(item_feat_cols)
-    print(train_X[0].shape)
-
+    print(train_X)
     return user_feat_cols, item_feat_cols, train_X, train_y, test_X, test_y
 
-create_ml_100k_dataset()
+# create_ml_100k_dataset()
