@@ -1,13 +1,10 @@
 
 import tensorflow as tf
-from tensorflow.keras.callbacks import EarlyStopping
-from tensorflow.keras.losses import binary_crossentropy
-from tensorflow.keras.metrics import AUC
 from tensorflow.keras.optimizers import Adam
 from tensorflow.python.keras import backend as K
 
 from match.youtube_dnn.model import YoutubeDNN
-from match.youtube_dnn.data_process import create_ml_100k_dataset
+from match.utils.data_process import create_ml_100k_dataset
 
 import os
 

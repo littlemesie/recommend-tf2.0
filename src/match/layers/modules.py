@@ -2,6 +2,30 @@ import tensorflow as tf
 from tensorflow.keras.layers import Layer, Dense, Dropout
 from tensorflow.keras.initializers import Zeros
 
+def div(x, y, name=None):
+    try:
+        return tf.realdiv(x, y, name=name)
+    except AttributeError:
+        return tf.divide(x, y, name=name)
+
+def reduce_sum(input_tensor,
+               axis=None,
+               keep_dims=False,
+               name=None,
+               reduction_indices=None):
+    try:
+        return tf.reduce_sum(input_tensor,
+                             axis=axis,
+                             keep_dims=keep_dims,
+                             name=name,
+                             reduction_indices=reduction_indices)
+    except TypeError:
+        return tf.reduce_sum(input_tensor,
+                             axis=axis,
+                             keepdims=keep_dims,
+                             name=name)
+
+
 
 class DNN(Layer):
     """DNN Layer"""
@@ -58,3 +82,34 @@ class SampledSoftmaxLayer(Layer):
                                           num_classes=self.size,  # self.target_song_size
                                           )
         return tf.expand_dims(loss, axis=1)
+
+class Similarity(Layer):
+
+    def __init__(self, gamma=1, axis=-1, type='cos', **kwargs):
+        self.gamma = gamma
+        self.axis = axis
+        self.type = type
+        super(Similarity, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        # Be sure to call this somewhere!
+        super(Similarity, self).build(input_shape)
+
+    def call(self, inputs, **kwargs):
+        query, candidate = inputs
+        if self.type == "cos":
+            query_norm = tf.norm(query, axis=self.axis)
+            candidate_norm = tf.norm(candidate, axis=self.axis)
+            cosine_score = reduce_sum(tf.multiply(query, candidate), -1)
+            cosine_score = div(cosine_score, query_norm * candidate_norm + 1e-8)
+            cosine_score = tf.clip_by_value(cosine_score, -1, 1.0) * self.gamma
+
+        return cosine_score
+
+    def compute_output_shape(self, input_shape):
+        return (None, 1)
+
+    def get_config(self, ):
+        config = {'gamma': self.gamma, 'axis': self.axis, 'type': self.type}
+        base_config = super(Similarity, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))

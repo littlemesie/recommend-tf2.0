@@ -14,7 +14,7 @@ def get_label(row):
 
 def create_ml_100k_dataset(embed_dim=16):
     """加载数据"""
-    base_path = '/Users/mesie/python/recommend-learning/data/'
+    base_path = '/Users/mesie/Pycharm/recommend/recommend-learning/data/'
     rating_df = pd.read_csv(base_path + 'ml-100k/u.data', sep='\t',
                             names=['user_id', 'movie_id', 'rating', 'timestamp'])
 
@@ -61,14 +61,12 @@ def create_ml_100k_dataset(embed_dim=16):
 
     train, test = train_test_split(data_df, test_size=0.2)
     train_X = [{feat: train[feat].values for feat in user_features},
-               {feat: train[feat].values for feat in movie_features},
-               train['label'].values.astype('int32')]
+               {feat: train[feat].values for feat in movie_features}]
     # train_X = [train[user_features].values.astype('int32'), train[movie_features].values.astype('int32'),
     #            train['label'].values.astype('int32')]
     train_y = train['label'].values.astype('int32')
     test_X = [{feat: test[feat].values for feat in user_features},
-              {feat: test[feat].values for feat in movie_features},
-              test['label'].values.astype('int32')]
+              {feat: test[feat].values for feat in movie_features}]
 
     # test_X = [test[user_features].values.astype('int32'), test[movie_features].values.astype('int32'),
     #           test['label'].values.astype('int32')]
