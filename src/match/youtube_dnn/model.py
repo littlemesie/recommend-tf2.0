@@ -1,6 +1,5 @@
 import tensorflow as tf
 from tensorflow.keras import Model
-from tensorflow.keras.initializers import Zeros
 from tensorflow.keras.regularizers import l2
 from tensorflow.keras.layers import Embedding, Dense, Input
 from match.layers.modules import DNN, SampledSoftmaxLayer
@@ -44,23 +43,20 @@ class YoutubeDNN(Model):
     def call(self, inputs, training=None, mask=None):
 
         user_sparse_inputs, item_sparse_inputs, labels = inputs
-        print(user_sparse_inputs, item_sparse_inputs)
+
         user_sparse_embed = tf.concat([self.user_embed_layers['embed_{}'.format(k)](v)
                                   for k, v in user_sparse_inputs.items()], axis=-1)
 
         user_dnn_input = user_sparse_embed
-        user_dnn_out = self.user_dnn(user_dnn_input)
+        self.user_dnn_out = self.user_dnn(user_dnn_input)
 
         item_sparse_embed = tf.concat([self.item_embed_layers['embed_{}'.format(k)](v)
                                        for k, v in item_sparse_inputs.items()], axis=-1)
         item_dnn_input = item_sparse_embed
-        item_dnn_out = self.item_dnn(item_dnn_input)
+        self.item_dnn_out = self.item_dnn(item_dnn_input)
 
 
-        output = self.sampled_softmax([item_dnn_out, user_dnn_out, labels])
-
-        self.user_embed = user_dnn_out
-        self.item_embed = item_dnn_out
+        output = self.sampled_softmax([self.item_dnn_out, self.user_dnn_out, labels])
 
         return output
 
@@ -76,7 +72,13 @@ class YoutubeDNN(Model):
         model = Model(inputs=[user_sparse_inputs, item_sparse_inputs, labels_inputs],
               outputs=self.call([user_sparse_inputs, item_sparse_inputs,
                                  labels_inputs]))
+        model.__setattr__("user_input", user_sparse_inputs)
+        model.__setattr__("item_input", item_sparse_inputs)
+        model.__setattr__("user_embeding", self.user_dnn_out)
+        model.__setattr__("item_embeding", self.item_dnn_out)
+
         model.summary()
+        return model
 
 
 # def test_model():

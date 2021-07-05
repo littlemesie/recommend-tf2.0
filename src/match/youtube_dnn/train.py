@@ -1,18 +1,14 @@
-
+import numpy as np
 import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
-from tensorflow.python.keras import backend as K
 
 from match.youtube_dnn.model import YoutubeDNN
 from match.utils.data_process import create_ml_100k_dataset
-
+from match.utils.loss_util import sampledsoftmaxloss
 import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-def sampledsoftmaxloss(y_true, y_pred):
-
-    return K.mean(y_pred)
 
 if __name__ == '__main__':
     # =============================== GPU ==============================
@@ -34,8 +30,8 @@ if __name__ == '__main__':
     # ============================Build Model==========================
     mirrored_strategy = tf.distribute.MirroredStrategy()
     with mirrored_strategy.scope():
-        model = YoutubeDNN(user_sparse_feature_columns=user_feat_cols, item_sparse_feature_columns=item_feat_cols, dnn_dropout=dnn_dropout)
-        model.summary()
+        youtube = YoutubeDNN(user_sparse_feature_columns=user_feat_cols, item_sparse_feature_columns=item_feat_cols, dnn_dropout=dnn_dropout)
+        model = youtube.summary()
         # ============================Compile============================
         model.compile(loss=sampledsoftmaxloss, optimizer=Adam(learning_rate=learning_rate))
 
@@ -44,6 +40,7 @@ if __name__ == '__main__':
     # checkpoint = tf.keras.callbacks.ModelCheckpoint(check_path, save_weights_only=True,
     #                                                 verbose=1, period=5)
     # ==============================Fit==============================
+    train_X = [train_X[0], train_X[1], train_y]
     model.fit(
         train_X,
         train_y,

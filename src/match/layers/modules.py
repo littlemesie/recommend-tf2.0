@@ -72,8 +72,7 @@ class SampledSoftmaxLayer(Layer):
         item_embeddings = tf.squeeze(item_embeddings, axis=1)  # (None, len)
         # item_embeddings = tf.transpose(item_embeddings)
         user_embeddings = tf.squeeze(user_embeddings, axis=1)  # (None, len)
-        print('bias: ', self.zero_bias)
-        print(item_embeddings, user_embeddings)
+
         loss = tf.nn.sampled_softmax_loss(weights=item_embeddings,  # self.item_embedding.
                                           biases=self.zero_bias,
                                           labels=label_idx,
