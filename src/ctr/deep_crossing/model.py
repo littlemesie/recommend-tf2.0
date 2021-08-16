@@ -9,27 +9,22 @@
 import tensorflow as tf
 from tensorflow.keras import Model
 from tensorflow.keras.regularizers import l2
-from tensorflow.keras.layers import Embedding, Dense, Input
+from tensorflow.keras.layers import Embedding, Dense, Dropout, Input
 
-from ctr.layers.modules import CrossNetwork, DNN
+from ctr.layers.modules import Residual_Units
 
 
-class DCN(Model):
-    def __init__(self, feature_columns, hidden_units, activation='relu',
-                 dnn_dropout=0., embed_reg=1e-6, cross_w_reg=1e-6, cross_b_reg=1e-6):
+class Deep_Crossing(Model):
+    def __init__(self, feature_columns, hidden_units, res_dropout=0., embed_reg=1e-6):
         """
-        Deep&Cross Network
+        Deep&Crossing
         :param feature_columns: A list. sparse column feature information.
         :param hidden_units: A list. Neural network hidden units.
-        :param activation: A string. Activation function of dnn.
-        :param dnn_dropout: A scalar. Dropout of dnn.
+        :param res_dropout: A scalar. Dropout of resnet.
         :param embed_reg: A scalar. The regularizer of embedding.
-        :param cross_w_reg: A scalar. The regularizer of cross network.
-        :param cross_b_reg: A scalar. The regularizer of cross network.
         """
-        super(DCN, self).__init__()
+        super(Deep_Crossing, self).__init__()
         self.sparse_feature_columns = feature_columns
-        self.layer_num = len(hidden_units)
         self.embed_layers = {
             'embed_' + str(i): Embedding(input_dim=feat['feat_num'],
                                          input_length=1,
@@ -38,22 +33,21 @@ class DCN(Model):
                                          embeddings_regularizer=l2(embed_reg))
             for i, feat in enumerate(self.sparse_feature_columns)
         }
-        self.cross_network = CrossNetwork(self.layer_num, cross_w_reg, cross_b_reg)
-        self.dnn_network = DNN(hidden_units, activation, dnn_dropout)
-        self.dense_final = Dense(1, activation=None)
+        # the total length of embedding layers
+        embed_layers_len = sum([feat['embed_dim'] for feat in self.sparse_feature_columns])
+        self.res_network = [Residual_Units(unit, embed_layers_len) for unit in hidden_units]
+        self.res_dropout = Dropout(res_dropout)
+        self.dense = Dense(1, activation=None)
 
     def call(self, inputs, **kwargs):
         sparse_inputs = inputs
         sparse_embed = tf.concat([self.embed_layers['embed_{}'.format(i)](sparse_inputs[:, i])
                                   for i in range(sparse_inputs.shape[1])], axis=-1)
-        x = sparse_embed
-        # Cross Network
-        cross_x = self.cross_network(x)
-        # DNN
-        dnn_x = self.dnn_network(x)
-        # Concatenate
-        total_x = tf.concat([cross_x, dnn_x], axis=-1)
-        outputs = tf.nn.sigmoid(self.dense_final(total_x))
+        r = sparse_embed
+        for res in self.res_network:
+            r = res(r)
+        r = self.res_dropout(r)
+        outputs = tf.nn.sigmoid(self.dense(r))
         return outputs
 
     def summary(self, **kwargs):
