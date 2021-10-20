@@ -146,7 +146,7 @@ def create_sasrec_dataset(trans_score=2, embed_dim=8, maxlen=10, test_neg_num=20
 
 # create_ml_100k_dataset()
 
-item_feat_col, train, val, test = create_sasrec_dataset()
-
-print(item_feat_col)
-print(train)
+# item_feat_col, train, val, test = create_sasrec_dataset()
+#
+# print(item_feat_col)
+# print(train)

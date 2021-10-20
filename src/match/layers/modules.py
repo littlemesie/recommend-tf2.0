@@ -30,7 +30,7 @@ class SampledSoftmaxLayer(Layer):
         self.num_sampled = num_sampled
 
     def build(self, input_shape):
-        self.size = input_shape[0][1]
+        self.size = input_shape[0][2]
         self.zero_bias = self.add_weight(shape=[self.size],
                                          initializer=Zeros,
                                          dtype=tf.float32,

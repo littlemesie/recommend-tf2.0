@@ -21,7 +21,7 @@ if __name__ == '__main__':
     hidden_units = [256, 128, 64]
 
     learning_rate = 0.001
-    batch_size = 512
+    batch_size = 128
     epochs = 10
 
     # ========================== Create dataset =======================
@@ -41,6 +41,7 @@ if __name__ == '__main__':
     #                                                 verbose=1, period=5)
     # ==============================Fit==============================
     train_X = [train_X[0], train_X[1], train_y]
+    print(train_X)
     model.fit(
         train_X,
         train_y,
