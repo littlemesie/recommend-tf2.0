@@ -77,8 +77,8 @@ class Dssm(Model):
         item_dnn_input = item_sparse_embed
         self.item_dnn_out = self.item_dnn(item_dnn_input)
 
-
-        output = self.cosine_similarity(self.item_dnn_out, self.user_dnn_out)
+        cosine_score = self.cosine_similarity(self.item_dnn_out, self.user_dnn_out)
+        output = tf.reshape(tf.sigmoid(cosine_score), (-1, 1))
 
         return output
 
