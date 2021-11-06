@@ -28,6 +28,12 @@ def denseFeature(feat):
     """
     return {'feat': feat}
 
+def convert_float(x):
+    try:
+        return float(x)
+    except ValueError:
+        return 0.0
+
 
 def create_criteo_dataset(file, embed_dim=8, read_part=True, sample_num=100000, test_size=0.2):
     """
@@ -45,11 +51,11 @@ def create_criteo_dataset(file, embed_dim=8, read_part=True, sample_num=100000, 
              'C23', 'C24', 'C25', 'C26']
 
     if read_part:
-        data_df = pd.read_csv(file, sep='\t', iterator=True, header=None,names=names)
+        data_df = pd.read_csv(file, iterator=True)
         data_df = data_df.get_chunk(sample_num)
 
     else:
-        data_df = pd.read_csv(file, sep='\t', header=None, names=names)
+        data_df = pd.read_csv(file)
 
     sparse_features = ['C' + str(i) for i in range(1, 27)]
     dense_features = ['I' + str(i) for i in range(1, 14)]
@@ -59,14 +65,16 @@ def create_criteo_dataset(file, embed_dim=8, read_part=True, sample_num=100000, 
 
     for feat in sparse_features:
         le = LabelEncoder()
-        data_df[feat] = le.fit_transform(data_df[feat])
+        data_df[feat] = le.fit_transform(data_df[feat].astype(str))
 
     # ==============Feature Engineering===================
 
-    dense_features = [feat for feat in data_df.columns if feat not in sparse_features + ['label']]
+    # dense_features = [feat for feat in data_df.columns if feat not in sparse_features + ['label']]
 
-    mms = MinMaxScaler(feature_range=(0, 1))
-    data_df[dense_features] = mms.fit_transform(data_df[dense_features])
+
+    for feat in dense_features:
+        mms = MinMaxScaler()
+        data_df[feat] = mms.fit_transform(data_df[dense_features].astype(int))
 
     feature_columns = [[denseFeature(feat) for feat in dense_features]] + \
                       [[sparseFeature(feat, len(data_df[feat].unique()), embed_dim=embed_dim)

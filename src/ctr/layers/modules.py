@@ -36,7 +36,7 @@ class FM(Layer):
     """
     Wide part
     """
-    def __init__(self, feature_length, w_reg=1e-6):
+    def __init__(self,  feature_length, w_reg=1e-6):
         """
         Factorization Machine
         In DeepFM, only the first order feature and second order feature intersect are included.
@@ -59,15 +59,16 @@ class FM(Layer):
           sparse_inputs is 2D tensor with shape `(batch_size, sum(field_num))`
           embed_inputs is 3D tensor with shape `(batch_size, fields, embed_dim)`
         """
-        sparse_inputs, embed_inputs = inputs['sparse_inputs'], inputs['embed_inputs']
-        # first order
-        first_order = tf.reduce_sum(tf.nn.embedding_lookup(self.w, sparse_inputs), axis=1)  # (batch_size, 1)
+        first_inputs, second_inputs = inputs
+        # first order, No w0
+        first_order = tf.reduce_sum(tf.matmul(first_inputs, self.w))  # (batch_size, 1)
         # second order
-        square_sum = tf.square(tf.reduce_sum(embed_inputs, axis=1, keepdims=True))  # (batch_size, 1, embed_dim)
-        sum_square = tf.reduce_sum(tf.square(embed_inputs), axis=1, keepdims=True)  # (batch_size, 1, embed_dim)
-        second_order = 0.5 * tf.reduce_sum(square_sum - sum_square, axis=2)  # (batch_size, 1)
-        return first_order + second_order
-
+        square_sum = tf.square(tf.reduce_sum(second_inputs, axis=1, keepdims=True))
+        sum_square = tf.reduce_sum(tf.square(second_inputs), axis=1, keepdims=True)
+        second_order = 0.5 * tf.reduce_sum(square_sum - sum_square, axis=1, keepdims=False)  # (batch_size, 1)
+        output = first_order + second_order
+        output = tf.reshape(output, shape=(-1, 1))
+        return output
 
 class CrossNetwork(Layer):
     def __init__(self, layer_num, reg_w=1e-6, reg_b=1e-6):

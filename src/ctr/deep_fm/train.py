@@ -1,16 +1,19 @@
+# -*- coding:utf-8 -*-
 
-
-import numpy as np
+"""
+@ide: PyCharm
+@author: mesie
+@date: 2021/11/6 上午10:35
+@summary:
+"""
+import os
 import tensorflow as tf
 from tensorflow.keras.losses import binary_crossentropy
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.metrics import AUC
-from ctr.fm.model import FM
-
+from ctr.deep_fm.model import DeepFM
 from ctr.utils.data_process import create_criteo_dataset
-
-import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
@@ -23,11 +26,9 @@ if __name__ == '__main__':
     # ========================= Hyper Parameters =======================
     # you can modify your file path
     file = '/data/python/data/criteo/criteo_sampled_data.csv'
-    read_part = True
-    sample_num = 1000000
+    read_part = False
+    sample_num = 100000
     test_size = 0.2
-
-    k = 10
 
     learning_rate = 0.001
     batch_size = 512
@@ -42,15 +43,15 @@ if __name__ == '__main__':
     # ============================Build Model==========================
     mirrored_strategy = tf.distribute.MirroredStrategy()
     with mirrored_strategy.scope():
-        fm = FM(feature_columns=feature_columns, k=k)
-        model = fm.build_graph()
+        dfm = DeepFM(feature_columns=feature_columns)
+        model = dfm.build_graph()
         model.summary()
         # ============================Compile============================
         model.compile(loss=binary_crossentropy, optimizer=Adam(learning_rate=learning_rate),
                       metrics=[AUC()])
 
     # ============================model checkpoint======================
-    # check_path = '../save/fm_weights.epoch_{epoch:04d}.val_loss_{val_loss:.4f}.ckpt'
+    # check_path = '../save/deep_fm_weights.epoch_{epoch:04d}.val_loss_{val_loss:.4f}.ckpt'
     # checkpoint = tf.keras.callbacks.ModelCheckpoint(check_path, save_weights_only=True,
     #                                                 verbose=1, period=5)
     # ==============================Fit==============================

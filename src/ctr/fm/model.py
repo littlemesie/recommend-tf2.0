@@ -1,7 +1,8 @@
 import tensorflow as tf
 from tensorflow.keras.regularizers import l2
+from tensorflow.keras import Model
 
-class FM(tf.keras.Model):
+class FM(Model):
     def __init__(self, feature_columns, k, w_reg=1e-4, v_reg=1e-4):
         """
         Factorization Machines
@@ -51,7 +52,8 @@ class FM(tf.keras.Model):
 
         return out
 
-    def summary(self, **kwargs):
+    def build_graph(self, **kwargs):
         dense_inputs = tf.keras.Input(shape=(len(self.dense_feature_columns),), dtype=tf.float32)
         sparse_inputs = tf.keras.Input(shape=(len(self.sparse_feature_columns),), dtype=tf.int32)
-        tf.keras.Model(inputs=[dense_inputs, sparse_inputs], outputs=self.call([dense_inputs, sparse_inputs])).summary()
+        model = Model(inputs=[dense_inputs, sparse_inputs], outputs=self.call([dense_inputs, sparse_inputs]))
+        return model
