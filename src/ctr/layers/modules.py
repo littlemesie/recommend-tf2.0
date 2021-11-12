@@ -132,11 +132,11 @@ class DNN(Layer):
         x = self.dropout(x)
         return x
 
-class Attention_Layer(Layer):
+class AttentionLayer(Layer):
     def __init__(self, att_hidden_units, activation='prelu'):
         """
         """
-        super(Attention_Layer, self).__init__()
+        super(AttentionLayer, self).__init__()
         self.att_dense = [Dense(unit, activation=activation) for unit in att_hidden_units]
         self.att_final_dense = Dense(1)
 

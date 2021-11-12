@@ -12,7 +12,7 @@ from tensorflow.keras import Model
 from tensorflow.keras.layers import Embedding, Dense, BatchNormalization, Input, PReLU, Dropout
 from tensorflow.keras.regularizers import l2
 
-from ctr.layers.modules import Attention_Layer, Dice
+from ctr.layers.modules import AttentionLayer, Dice
 
 
 class DIN(Model):
@@ -59,7 +59,7 @@ class DIN(Model):
                                  if feat['feat'] in behavior_feature_list]
 
         # attention layer
-        self.attention_layer = Attention_Layer(att_hidden_units, att_activation)
+        self.attention_layer = AttentionLayer(att_hidden_units, att_activation)
 
         self.bn = BatchNormalization(trainable=True)
         # ffn
