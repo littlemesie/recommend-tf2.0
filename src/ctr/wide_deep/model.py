@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
+from tensorflow.keras import Model
 from tensorflow.keras.layers import Dense, Embedding, Concatenate, Dropout, Input, Layer
 from tensorflow.keras.regularizers import l2
 
@@ -41,7 +42,7 @@ class DNN(Layer):
         return x
 
 
-class WideDeep(tf.keras.Model):
+class WideDeep(Model):
     def __init__(self, feature_columns, hidden_units, activation='relu',
                  dnn_dropout=0., embed_reg=1e-4):
         """
@@ -81,8 +82,9 @@ class WideDeep(tf.keras.Model):
         outputs = tf.nn.sigmoid(0.5 * wide_out + 0.5 * deep_out)
         return outputs
 
-    def summary(self, **kwargs):
+    def build_graph(self, **kwargs):
         dense_inputs = Input(shape=(len(self.dense_feature_columns),), dtype=tf.float32)
         sparse_inputs = Input(shape=(len(self.sparse_feature_columns),), dtype=tf.int32)
-        keras.Model(inputs=[dense_inputs, sparse_inputs],
-                    outputs=self.call([dense_inputs, sparse_inputs])).summary()
+        model = Model(inputs=[dense_inputs, sparse_inputs],
+                    outputs=self.call([dense_inputs, sparse_inputs]))
+        return model

@@ -44,8 +44,8 @@ if __name__ == '__main__':
     # ============================Build Model==========================
     mirrored_strategy = tf.distribute.MirroredStrategy()
     with mirrored_strategy.scope():
-        model = WideDeep(feature_columns, hidden_units=hidden_units, dnn_dropout=dnn_dropout)
-        model.summary()
+        wdl = WideDeep(feature_columns, hidden_units=hidden_units, dnn_dropout=dnn_dropout)
+        model = wdl.build_graph()
         # ============================Compile============================
         model.compile(loss=binary_crossentropy, optimizer=Adam(learning_rate=learning_rate),
                       metrics=[AUC()])
