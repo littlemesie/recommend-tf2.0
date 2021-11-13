@@ -45,12 +45,11 @@ class ESMM(Model):
                                         cvr_item_cate_input)
         ctcvr_pred = tf.multiply(ctr_pred, cvr_pred)
         outputs = [ctr_pred, ctcvr_pred]
-        print(outputs)
+
         return outputs
 
     def build_ctr_model(self, ctr_user_numerical_input, ctr_user_cate_input, ctr_item_numerical_input,
                         ctr_item_cate_input):
-        print(self.user_cate_feature_dict)
         user_embeddings = tf.concat([self.embed_layers['embed_{}'.format(k)](ctr_user_cate_input[:, v[0]])
                                      for k, v in self.user_cate_feature_dict.items()], axis=-1)
 
