@@ -56,6 +56,8 @@ class DCN(Model):
         outputs = tf.nn.sigmoid(self.dense_final(total_x))
         return outputs
 
-    def summary(self, **kwargs):
+    def build_graph(self, **kwargs):
         sparse_inputs = Input(shape=(len(self.sparse_feature_columns),), dtype=tf.int32)
-        Model(inputs=sparse_inputs, outputs=self.call(sparse_inputs)).summary()
+        model = Model(inputs=sparse_inputs, outputs=self.call(sparse_inputs))
+
+        return model
