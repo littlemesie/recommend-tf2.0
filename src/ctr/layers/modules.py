@@ -127,6 +127,7 @@ class DNN(Layer):
 
     def call(self, inputs, **kwargs):
         x = inputs
+        x = BatchNormalization()(x)
         for dnn in self.dnn_network:
             x = dnn(x)
         x = self.dropout(x)
