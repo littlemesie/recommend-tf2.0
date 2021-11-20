@@ -6,6 +6,7 @@ from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.utils import to_categorical
 
 random.seed(2020)
 
@@ -224,3 +225,73 @@ def create_amazon_electronic_dataset(embed_dim=8, maxlen=40):
     test_y = test['label'].values
     print('============Data Preprocess End=============')
     return feature_columns, behavior_list, (train_X, train_y), (val_X, val_y), (test_X, test_y)
+
+def create_census_dataset(embed_dim=8, seed=1):
+    """
+    census data: https://www2.1010data.com/documentationcenter/prod/Tutorials/MachineLearningExamples/CensusIncomeDataSet.html
+    """
+    column_names = ['age', 'class_worker', 'det_ind_code', 'det_occ_code', 'education', 'wage_per_hour', 'hs_college',
+                    'marital_stat', 'major_ind_code', 'major_occ_code', 'race', 'hisp_origin', 'sex', 'union_member',
+                    'unemp_reason', 'full_or_part_emp', 'capital_gains', 'capital_losses', 'stock_dividends',
+                    'tax_filer_stat', 'region_prev_res', 'state_prev_res', 'det_hh_fam_stat', 'det_hh_summ',
+                    'instance_weight', 'mig_chg_msa', 'mig_chg_reg', 'mig_move_reg', 'mig_same', 'mig_prev_sunbelt',
+                    'num_emp', 'fam_under_18', 'country_father', 'country_mother', 'country_self', 'citizenship',
+                    'own_or_self', 'vet_question', 'vet_benefits', 'weeks_worked', 'year', 'income_50k']
+
+    # Load the dataset in Pandas
+    train_df = pd.read_csv('/data/python/data/census/census-income.data.gz', sep=',', names=column_names)
+    test_df = pd.read_csv('/data/python/data/census/census-income.test.gz', sep=',', names=column_names)
+    print(train_df)
+    # First group of tasks according to the paper
+    label_columns = ['income_50k', 'marital_stat']
+
+    # One-hot encoding categorical columns
+    categorical_columns = ['class_worker', 'det_ind_code', 'det_occ_code', 'education', 'hs_college', 'major_ind_code',
+                           'major_occ_code', 'race', 'hisp_origin', 'sex', 'union_member', 'unemp_reason',
+                           'full_or_part_emp', 'tax_filer_stat', 'region_prev_res', 'state_prev_res', 'det_hh_fam_stat',
+                           'det_hh_summ', 'mig_chg_msa', 'mig_chg_reg', 'mig_move_reg', 'mig_same', 'mig_prev_sunbelt',
+                           'fam_under_18', 'country_father', 'country_mother', 'country_self', 'citizenship',
+                           'vet_question']
+    train_raw_labels = train_df[label_columns]
+    test_raw_labels = test_df[label_columns]
+    transformed_train = pd.get_dummies(train_df.drop(label_columns, axis=1), columns=categorical_columns)
+    transformed_test = pd.get_dummies(test_df.drop(label_columns, axis=1), columns=categorical_columns)
+
+    # # Filling the missing column in the other set
+    # transformed_other['det_hh_fam_stat_ Grandchild <18 ever marr not in subfamily'] = 0
+
+    # One-hot encoding categorical labels
+    train_income = to_categorical((train_raw_labels.income_50k == ' 50000+.').astype(int), num_classes=2)
+    train_marital = to_categorical((train_raw_labels.marital_stat == ' Never married').astype(int), num_classes=2)
+    test_income = to_categorical((test_raw_labels.income_50k == ' 50000+.').astype(int), num_classes=2)
+    test_marital = to_categorical((test_raw_labels.marital_stat == ' Never married').astype(int), num_classes=2)
+
+    dict_outputs = {
+        'income': train_income.shape[1],
+        'marital': train_marital.shape[1]
+    }
+    dict_train_labels = {
+        'income': train_income,
+        'marital': train_marital
+    }
+    dict_test_labels = {
+        'income': test_income,
+        'marital': test_marital
+    }
+    output_info = [(dict_outputs[key], key) for key in sorted(dict_outputs.keys())]
+
+    # Split the other dataset into 1:1 validation to test according to the paper
+    validation_indices = transformed_test.sample(frac=0.5, replace=False, random_state=seed).index
+    test_indices = list(set(transformed_test.index) - set(validation_indices))
+    validation_data = transformed_test.iloc[validation_indices]
+    validation_label = [dict_test_labels[key][validation_indices] for key in sorted(dict_test_labels.keys())]
+    test_data = transformed_test.iloc[test_indices]
+    test_label = [dict_test_labels[key][test_indices] for key in sorted(dict_test_labels.keys())]
+    # train data
+    train_data = transformed_train
+    train_label = [dict_train_labels[key] for key in sorted(dict_train_labels.keys())]
+
+    return train_data, train_label, validation_data, validation_label, test_data, test_label, output_info
+
+# train_data, train_label, validation_data, validation_label, test_data, test_label, output_info = create_census_dataset()
+# print(test_label)
