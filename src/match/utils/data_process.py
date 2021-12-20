@@ -19,7 +19,7 @@ def get_label(row):
 
 def create_ml_100k_dataset(embed_dim=16):
     """加载数据"""
-    base_path = '/Users/mesie/Pycharm/recommend/recommend-learning/data/'
+    base_path = '/home/mesie/python/recommend/recommend-learning/data/'
     rating_df = pd.read_csv(base_path + 'ml-100k/u.data', sep='\t',
                             names=['user_id', 'movie_id', 'rating', 'timestamp'])
 
