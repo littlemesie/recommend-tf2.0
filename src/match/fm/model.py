@@ -79,7 +79,6 @@ class FM(Model):
         stack = tf.concat([user_sparse_embed, item_sparse_embed], axis=-1)
 
         stack = tf.reshape(stack, (-1, stack.shape[2]))
-        self.embeds = stack
         # first order
         first_order = self.w0 + tf.matmul(stack, self.w)
         # second order
@@ -105,7 +104,6 @@ class FM(Model):
         model.__setattr__("item_input", item_sparse_inputs)
         model.__setattr__("user_embeds", self.user_embeds)
         model.__setattr__("item_embeds", self.item_embeds)
-        model.__setattr__("embeds", self.embeds)
         return model
 
 def model_test():
