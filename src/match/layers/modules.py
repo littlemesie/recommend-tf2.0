@@ -187,7 +187,7 @@ class EncoderLayer(Layer):
         return out2
 
 class PoolingLayer(Layer):
-
+    """"""
     def __init__(self, mode='mean', **kwargs):
 
         if mode not in ['mean', 'max', 'sum']:
@@ -222,7 +222,10 @@ class MultiInterestLayer(Layer):
         super(MultiInterestLayer, self).__init__(**kwargs)
 
     def build(self, input_shape):
-        self.routing_logits = self.add_weight(shape=[1, self.k_max, self.max_len],
+
+        batch_size = input_shape[0][0]
+        # batch_size = 32
+        self.routing_logits = self.add_weight(shape=[batch_size, self.k_max, self.max_len],
                                               initializer=RandomNormal(stddev=self.init_std),
                                               trainable=False, name="B", dtype=tf.float32)
         self.bilinear_mapping_matrix = self.add_weight(shape=[self.input_units, self.out_units],
@@ -232,15 +235,15 @@ class MultiInterestLayer(Layer):
 
     def call(self, inputs, **kwargs):
         behavior_embeddings, seq_len = inputs
-        batch_size = behavior_embeddings.shape[0]
-        seq_len_tile = tf.tile(seq_len, [1, self.k_max])
 
         for i in range(self.iteration_times):
-            mask = tf.sequence_mask(seq_len_tile, self.max_len)
+            mask = tf.sequence_mask(seq_len, self.max_len)
             pad = tf.ones_like(mask, dtype=tf.float32) * (-2 ** 32 + 1)
-            routing_logits_with_padding = tf.where(mask, tf.tile(self.routing_logits, [batch_size, 1, 1]), pad)
-            weight = tf.nn.softmax(routing_logits_with_padding)
+            routing_logits_with_padding = tf.minimum(self.routing_logits, pad)
+            weight = tf.nn.softmax(routing_logits_with_padding, axis=2)
             behavior_embdding_mapping = tf.tensordot(behavior_embeddings, self.bilinear_mapping_matrix, axes=1)
+            print(weight.shape[2])
+            print(behavior_embdding_mapping)
             Z = tf.matmul(weight, behavior_embdding_mapping)
             interest_capsules = squash(Z)
             delta_routing_logits = tf.reduce_sum(
@@ -248,15 +251,15 @@ class MultiInterestLayer(Layer):
                 axis=0, keep_dims=True
             )
             self.routing_logits.assign_add(delta_routing_logits)
-        print("111", interest_capsules)
         interest_capsules = tf.reshape(interest_capsules, [-1, self.k_max, self.out_units])
         return interest_capsules
 
     def compute_output_shape(self, input_shape):
         return (None, self.k_max, self.out_units)
 
-# history_emb = tf.keras.Input(shape=(None,))
+# history_emb = tf.keras.Input(shape=(50, 64))
 # print(history_emb)
 # high_capsule = MultiInterestLayer(input_units=16,
-#                                 out_units=16, max_len=None,
-#                                 k_max=2)((history_emb, 10))
+#                                   out_units=16,
+#                                   max_len=16,
+#                                   k_max=2)((history_emb, 10))

@@ -14,10 +14,10 @@ from match.layers.modules import DNN, SampledSoftmaxLayer, PoolingLayer, MultiIn
 
 class MIND(Model):
 
-    def __init__(self, user_sparse_feature_columns, item_sparse_feature_columns, user_dense_feature_columns=(),
-                 item_dense_feature_columns=(), num_sampled=1, hist_len=10, mode='mean', kernel_sizes=[2, 3, 5],
-                 user_dnn_hidden_units=(64, 32), item_dnn_hidden_units=(64, 32), dnn_activation='relu',
-               l2_reg_embedding=1e-6, dnn_dropout=0, **kwargs):
+    def __init__(self, user_sparse_feature_columns, item_sparse_feature_columns, hist_item_sparse_feature_columns,
+                 user_dense_feature_columns=(),item_dense_feature_columns=(), num_sampled=1, hist_len=2,
+                 mode='mean', kernel_sizes=[2, 3, 5], user_dnn_hidden_units=(64, 32), item_dnn_hidden_units=(64, 32),
+                 dnn_activation='relu', l2_reg_embedding=1e-6, dnn_dropout=0, **kwargs):
         super(MIND, self).__init__(**kwargs)
         self.num_sampled = num_sampled
         self.hist_len = hist_len
@@ -25,6 +25,7 @@ class MIND(Model):
         self.user_dense_feature_columns = user_dense_feature_columns
         self.item_sparse_feature_columns = item_sparse_feature_columns
         self.item_dense_feature_columns = item_dense_feature_columns
+        self.hist_item_sparse_feature_columns = hist_item_sparse_feature_columns
         self.mode = mode
         self.kernel_sizes = kernel_sizes
 
@@ -70,16 +71,19 @@ class MIND(Model):
 
         # hist item embed
         hist_item_embed = None
+        print(hist_item_sparse_inputs)
         for i, hist_input in enumerate(hist_item_sparse_inputs):
             hist_item_sparse_embed = tf.concat([self.item_embed_layers['embed_{}'.format(k)](v)
                                            for k, v in item_sparse_inputs.items()], axis=-1)
             hist_item_sparse_embed = tf.squeeze(hist_item_sparse_embed, axis=1)  # (None, len)
-            print(hist_item_embed)
-            hist_item_x = self.pools(hist_item_sparse_embed)
+
+            # hist_item_x = self.pools([hist_item_sparse_embed])
+            print(hist_item_sparse_embed)
             if i == 0:
-                hist_item_embed = hist_item_x
+                hist_item_embed = hist_item_sparse_embed
             else:
-                hist_item_embed = tf.concat([hist_item_embed, hist_item_x], axis=-1)
+                hist_item_embed = self.pools([hist_item_embed, hist_item_sparse_embed])
+            print(hist_item_embed)
         print(hist_item_embed)
 
         # Multi Interest Layer
@@ -97,7 +101,7 @@ class MIND(Model):
         item_sparse_inputs = {uf['feat']: Input(shape=(1, ), dtype=tf.float32) for uf in
                               self.item_sparse_feature_columns}
         hist_item_sparse_inputs = [{uf['feat']: Input(shape=(1, ), dtype=tf.float32) for uf in
-                              self.item_sparse_feature_columns} for i in range(self.hist_len)]
+                              self.hist_item_sparse_feature_columns} for i in range(self.hist_len)]
 
         labels_inputs = Input(shape=(1,), dtype=tf.int32)
 
@@ -114,9 +118,10 @@ class MIND(Model):
 
 def test_model():
     user_features = [{'feat': 'user_id', 'feat_num': 100, 'feat_len': 1, 'embed_dim': 8}]
-    item_features = [{'feat': 'item_id', 'feat_num': 100, 'feat_len': 1, 'embed_dim': 8},
+    item_features = [{'feat': 'item_id', 'feat_num': 100, 'feat_len': 1, 'embed_dim': 8}]
+    hist_item_sparse_features = [{'feat': 'item_id', 'feat_num': 100, 'feat_len': 1, 'embed_dim': 8},
                      {'feat': 'user_id', 'feat_num': 100, 'feat_len': 1, 'embed_dim': 8}]
-    mind = MIND(user_features, item_features)
+    mind = MIND(user_features, item_features, hist_item_sparse_features)
     model = mind.summary()
     model.summary()
 
