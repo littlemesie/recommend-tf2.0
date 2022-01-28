@@ -196,21 +196,24 @@ class PoolingLayer(Layer):
         super(PoolingLayer, self).__init__(**kwargs)
 
     def call(self, inputs, mask=None, **kwargs):
+        if not isinstance(inputs, list):
+            inputs = [inputs]
+        if len(inputs) == 1:
+            return inputs[0]
+        expand_seq_value_len_list = list(map(lambda x: tf.expand_dims(x, axis=-1), inputs))
+
+        a = tf.keras.layers.Concatenate(axis=-1)(expand_seq_value_len_list)
         if self.mode == "mean":
-            output = tf.reduce_mean(inputs, axis=-1)
-        elif self.mode == "max":
-            output = tf.reduce_max(inputs, axis=-1)
+            output = tf.reduce_mean(a, axis=-1)
+        elif self.mode == "sum":
+            output = tf.reduce_sum(a, axis=-1)
         else:
-            output = tf.reduce_sum(inputs, axis=-1)
+            output = tf.reduce_max(a, axis=-1)
+
         return output
 
-def squash(inputs):
-    vec_squared_norm = tf.reduce_sum(tf.square(inputs), axis=-1, keep_dims=True)
-    scalar_factor = vec_squared_norm / (1 + vec_squared_norm) / tf.sqrt(vec_squared_norm + 1e-8)
-    vec_squashed = scalar_factor * inputs
-    return vec_squashed
 
-class MultiInterestLayer(Layer):
+class CapsuleLayer(Layer):
     def __init__(self, input_units, out_units, max_len, k_max, iteration_times=3,
                  init_std=1.0, **kwargs):
         self.input_units = input_units
@@ -219,47 +222,72 @@ class MultiInterestLayer(Layer):
         self.k_max = k_max
         self.iteration_times = iteration_times
         self.init_std = init_std
-        super(MultiInterestLayer, self).__init__(**kwargs)
+        super(CapsuleLayer, self).__init__(**kwargs)
+
+    def squash(self, inputs):
+        vec_squared_norm = tf.reduce_sum(tf.square(inputs), axis=-1, keepdims=True)
+        scalar_factor = vec_squared_norm / (1 + vec_squared_norm) / tf.sqrt(vec_squared_norm + 1e-8)
+        vec_squashed = scalar_factor * inputs
+        return vec_squashed
 
     def build(self, input_shape):
 
-        batch_size = input_shape[0][0]
-        # batch_size = 32
-        self.routing_logits = self.add_weight(shape=[batch_size, self.k_max, self.max_len],
+        self.routing_logits = self.add_weight(shape=[1, self.k_max, self.max_len],
                                               initializer=RandomNormal(stddev=self.init_std),
                                               trainable=False, name="B", dtype=tf.float32)
         self.bilinear_mapping_matrix = self.add_weight(shape=[self.input_units, self.out_units],
                                                        initializer=RandomNormal(stddev=self.init_std),
                                                        name="S", dtype=tf.float32)
-        super(MultiInterestLayer, self).build(input_shape)
+        super(CapsuleLayer, self).build(input_shape)
 
     def call(self, inputs, **kwargs):
         behavior_embeddings, seq_len = inputs
+        batch_size = tf.shape(behavior_embeddings)[0]
+        seq_len_tile = tf.tile(seq_len, [1, self.k_max])
 
         for i in range(self.iteration_times):
-            mask = tf.sequence_mask(seq_len, self.max_len)
+            mask = tf.sequence_mask(seq_len_tile, self.max_len)
             pad = tf.ones_like(mask, dtype=tf.float32) * (-2 ** 32 + 1)
-            routing_logits_with_padding = tf.minimum(self.routing_logits, pad)
-            weight = tf.nn.softmax(routing_logits_with_padding, axis=2)
+            routing_logits_with_padding = tf.where(mask, tf.tile(self.routing_logits, [batch_size, 1, 1]), pad)
+            weight = tf.nn.softmax(routing_logits_with_padding)
+            print(f"pad: {pad}, routing_logits_with_padding: {routing_logits_with_padding}, weight: {weight}")
             behavior_embdding_mapping = tf.tensordot(behavior_embeddings, self.bilinear_mapping_matrix, axes=1)
-            print(weight.shape[2])
-            print(behavior_embdding_mapping)
             Z = tf.matmul(weight, behavior_embdding_mapping)
-            interest_capsules = squash(Z)
+            interest_capsules = self.squash(Z)
             delta_routing_logits = tf.reduce_sum(
                 tf.matmul(interest_capsules, tf.transpose(behavior_embdding_mapping, perm=[0, 2, 1])),
-                axis=0, keep_dims=True
+                axis=0, keepdims=True
             )
             self.routing_logits.assign_add(delta_routing_logits)
         interest_capsules = tf.reshape(interest_capsules, [-1, self.k_max, self.out_units])
         return interest_capsules
 
-    def compute_output_shape(self, input_shape):
-        return (None, self.k_max, self.out_units)
+class LabelAwareAttention(Layer):
+    def __init__(self, k_max, pow_p=1, **kwargs):
+        self.k_max = k_max
+        self.pow_p = pow_p
+        super(LabelAwareAttention, self).__init__(**kwargs)
 
-# history_emb = tf.keras.Input(shape=(50, 64))
-# print(history_emb)
-# high_capsule = MultiInterestLayer(input_units=16,
-#                                   out_units=16,
-#                                   max_len=16,
-#                                   k_max=2)((history_emb, 10))
+    def call(self, inputs, training=None, **kwargs):
+        keys = inputs[0]
+        query = inputs[1]
+        weight = tf.reduce_sum(keys * query, axis=-1, keepdims=True)
+        weight = tf.pow(weight, self.pow_p)  # [x,k_max,1]
+
+        if len(inputs) == 3:
+            k_user = tf.cast(tf.maximum(
+                1.,
+                tf.minimum(
+                    tf.cast(self.k_max, dtype="float32"),  # k_max
+                    tf.math.log1p(tf.cast(inputs[2], dtype="float32")) / tf.math.log(2.)  # hist_len
+                )
+            ), dtype="int64")
+            seq_mask = tf.transpose(tf.sequence_mask(k_user, self.k_max), [0, 2, 1])
+            padding = tf.ones_like(seq_mask, dtype=tf.float32) * (-2 ** 32 + 1)  # [x,k_max,1]
+            weight = tf.where(seq_mask, weight, padding)
+
+        weight = tf.nn.softmax(weight, name="weight")
+        output = tf.reduce_sum(keys * weight, axis=1)
+
+        return output
+
