@@ -9,7 +9,7 @@
 import tensorflow as tf
 from tensorflow.keras import Model
 from tensorflow.keras.regularizers import l2
-from tensorflow.keras.layers import Embedding, Dense, Input, Lambda
+from tensorflow.keras.layers import Embedding, Input
 from match.layers.modules import DNN, SampledSoftmaxLayer, PoolingLayer, CapsuleLayer, LabelAwareAttention
 
 class MIND(Model):
@@ -61,11 +61,10 @@ class MIND(Model):
         user_sparse_embed = tf.concat([self.user_embed_layers['embed_{}'.format(k)](v)
                                   for k, v in user_sparse_inputs.items()], axis=-1)
 
-        # target item embed
+        # item embed
         item_sparse_embed = tf.concat([self.item_embed_layers['embed_{}'.format(k)](v)
                                        for k, v in item_sparse_inputs.items()], axis=-1)
         item_pool_out = self.pools([item_sparse_embed])
-
 
         # hist item embed
         hist_item_embed_list = []
@@ -93,8 +92,8 @@ class MIND(Model):
 
         user_dnn_out = self.user_dnn(user_deep_input)
         item_dnn_out = self.item_dnn(item_pool_out)
-
-        user_embedding_final = LabelAwareAttention(k_max=self.k_max, pow_p=self.p)((user_dnn_out, item_pool_out))
+        # label aware attention
+        user_embedding_final = LabelAwareAttention(k_max=self.k_max, pow_p=self.p)((user_dnn_out, item_dnn_out))
         user_embedding_final = tf.expand_dims(user_embedding_final, axis=1)
 
         self.user_embedding = user_embedding_final

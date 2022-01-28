@@ -250,7 +250,7 @@ class CapsuleLayer(Layer):
             pad = tf.ones_like(mask, dtype=tf.float32) * (-2 ** 32 + 1)
             routing_logits_with_padding = tf.where(mask, tf.tile(self.routing_logits, [batch_size, 1, 1]), pad)
             weight = tf.nn.softmax(routing_logits_with_padding)
-            print(f"pad: {pad}, routing_logits_with_padding: {routing_logits_with_padding}, weight: {weight}")
+
             behavior_embdding_mapping = tf.tensordot(behavior_embeddings, self.bilinear_mapping_matrix, axes=1)
             Z = tf.matmul(weight, behavior_embdding_mapping)
             interest_capsules = self.squash(Z)
