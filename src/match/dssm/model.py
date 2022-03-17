@@ -8,7 +8,6 @@
 """
 import tensorflow as tf
 from tensorflow.keras import Model
-from tensorflow.keras.initializers import Zeros
 from tensorflow.keras.regularizers import l2
 from tensorflow.keras.layers import Embedding, Dense, Input
 from match.layers.modules import DNN
@@ -82,7 +81,7 @@ class Dssm(Model):
 
         return output
 
-    def summary(self, **kwargs):
+    def build_graph(self, **kwargs):
 
         user_sparse_inputs = {uf['feat']: Input(shape=(1, ), dtype=tf.float32) for uf in
                               self.user_sparse_feature_columns}
@@ -105,6 +104,6 @@ class Dssm(Model):
 #     user_features = [{'feat': 'user_id', 'feat_num': 100, 'feat_len': 1, 'embed_dim': 8}]
 #     item_features = [{'feat': 'item_id', 'feat_num': 100, 'feat_len': 1, 'embed_dim': 8}]
 #     model = Dssm(user_features, item_features)
-#     model.summary()
+#     model.build_graph()
 #
 # model_test()
