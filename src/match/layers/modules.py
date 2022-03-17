@@ -295,7 +295,7 @@ class LabelAwareAttention(Layer):
 class SELayer(Layer):
     def __init__(self, filter_sq=16, **kwargs):
         # filter_sq 是 Excitation 中第一个卷积过程中卷积核的个数
-        super().__init__(**kwargs)
+        super(SELayer, self).__init__(**kwargs)
         self.filter_sq = filter_sq
         self.ave_pool = GlobalAveragePooling1D()
         self.dense = Dense(filter_sq)
