@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras.layers import Layer, Dense, Dropout, LayerNormalization, Conv1D, GlobalAveragePooling1D, \
-    GlobalMaxPooling1D, Concatenate
+    GlobalMaxPooling1D, Concatenate, Activation, GlobalAveragePooling2D, Reshape
 from tensorflow.keras.initializers import RandomNormal
 from tensorflow.keras.initializers import Zeros
 
@@ -290,4 +290,34 @@ class LabelAwareAttention(Layer):
         output = tf.reduce_sum(keys * weight, axis=1)
 
         return output
+
+
+class SELayer(Layer):
+    def __init__(self, filter_sq=16, **kwargs):
+        # filter_sq 是 Excitation 中第一个卷积过程中卷积核的个数
+        super().__init__(**kwargs)
+        self.filter_sq = filter_sq
+        self.ave_pool = GlobalAveragePooling1D()
+        self.dense = Dense(filter_sq)
+        self.relu = Activation('relu')
+        self.sigmoid = Activation('sigmoid')
+
+
+    def call(self, inputs, training=None, **kwargs):
+        squeeze = self.ave_pool(inputs)
+
+        excitation = self.dense(squeeze)
+        excitation = self.relu(excitation)
+        excitation = Dense(inputs.shape[-1])(excitation)
+        excitation = self.sigmoid(excitation)
+        excitation = Reshape((1, 1, inputs.shape[-1]))(excitation)
+
+        output = inputs * excitation
+
+        return output
+
+# import numpy as np
+# SE = SELayer(16)
+# inputs = np.zeros((1, 32, 32), dtype=np.float32)
+# print(SE(inputs).shape)
 
