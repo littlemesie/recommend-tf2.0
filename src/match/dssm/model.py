@@ -64,13 +64,13 @@ class Dssm(Model):
     def call(self, inputs, training=None, mask=None):
 
         user_sparse_inputs, item_sparse_inputs = inputs
-        # print(user_sparse_inputs, item_sparse_inputs)
+        # user tower
         user_sparse_embed = tf.concat([self.user_embed_layers['embed_{}'.format(k)](v)
                                   for k, v in user_sparse_inputs.items()], axis=-1)
 
         user_dnn_input = user_sparse_embed
         self.user_dnn_out = self.user_dnn(user_dnn_input)
-
+        # item tower
         item_sparse_embed = tf.concat([self.item_embed_layers['embed_{}'.format(k)](v)
                                        for k, v in item_sparse_inputs.items()], axis=-1)
         item_dnn_input = item_sparse_embed
@@ -85,7 +85,6 @@ class Dssm(Model):
 
         user_sparse_inputs = {uf['feat']: Input(shape=(1, ), dtype=tf.float32) for uf in
                               self.user_sparse_feature_columns}
-        # print(self.user_sparse_inputs)
         item_sparse_inputs = {uf['feat']: Input(shape=(1, ), dtype=tf.float32) for uf in
                               self.item_sparse_feature_columns}
 
@@ -95,8 +94,8 @@ class Dssm(Model):
 
         model.__setattr__("user_input", user_sparse_inputs)
         model.__setattr__("item_input", item_sparse_inputs)
-        model.__setattr__("user_embeding", self.user_dnn_out)
-        model.__setattr__("item_embeding", self.item_dnn_out)
+        model.__setattr__("user_embed", self.user_dnn_out)
+        model.__setattr__("item_embed", self.item_dnn_out)
         return model
 
 

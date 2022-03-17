@@ -60,8 +60,8 @@ if __name__ == '__main__':
         validation_split=0.1
     )
 
-    user_embed_model = Model(inputs=model.user_input, outputs=model.user_embeding)
-    item_embed_model = Model(inputs=model.item_input, outputs=model.item_embeding)
+    user_embed_model = Model(inputs=model.user_input, outputs=model.user_embed)
+    item_embed_model = Model(inputs=model.item_input, outputs=model.item_embed)
 
     user_embs = user_embed_model.predict(test_X[0])
 
