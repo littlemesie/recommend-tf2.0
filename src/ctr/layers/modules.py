@@ -10,6 +10,7 @@
 import tensorflow as tf
 from tensorflow.keras.regularizers import l2
 from tensorflow.keras.layers import Layer, BatchNormalization, Dense, Dropout, ReLU
+from ctr.layers.util import split_heads, scaled_dot_product_attention
 
 class Residual_Units(Layer):
     """
@@ -147,6 +148,7 @@ class AttentionLayer(Layer):
         # value: hist items  (None, seq_len, d * 2)
         # mask: (None, seq_len)
         q, k, v, mask = inputs
+
         q = tf.tile(q, multiples=[1, k.shape[1]])  # (None, seq_len * d * 2)
         q = tf.reshape(q, shape=[-1, k.shape[1], k.shape[2]])  # (None, seq_len, d * 2)
 
@@ -161,8 +163,12 @@ class AttentionLayer(Layer):
         outputs = tf.squeeze(outputs, axis=-1)  # (None, seq_len)
 
         paddings = tf.ones_like(outputs) * (-2 ** 32 + 1)  # (None, seq_len)
-        outputs = tf.where(tf.equal(mask, 0), paddings, outputs)  # (None, seq_len)
+        if isinstance(mask, tf.Tensor):
+            outputs = tf.where(tf.equal(mask, 0), paddings, outputs)  # (None, seq_len)
+        else:
+            outputs = paddings
 
+        # outputs = paddings
         # softmax
         outputs = tf.nn.softmax(logits=outputs)  # (None, seq_len)
         outputs = tf.expand_dims(outputs, axis=1)  # None, 1, seq_len)
@@ -172,6 +178,41 @@ class AttentionLayer(Layer):
 
         return outputs
 
+
+class MultiHeadAttention(Layer):
+    def __init__(self, att_hidden_units, num_heads, activation='relu'):
+        """Multi Head Attention Mechanism.
+        Args:
+            :param att_hidden_units: A scalar. The self-attention hidden size.
+            :param num_heads: A scalar. Number of heads. If num_heads == 1, the layer is a single self-attention layer.
+            :param activation: A String. The activation of attention.
+        :return:
+        """
+        super(MultiHeadAttention, self).__init__()
+        self.d_model = att_hidden_units
+        self.num_heads = num_heads
+
+        self.wq = Dense(self.d_model, activation=activation)
+        self.wk = Dense(self.d_model, activation=activation)
+        self.wv = Dense(self.d_model, activation=activation)
+
+    def call(self,  inputs, **kwargs):
+        q, k, v, mask = inputs
+        q = self.wq(q)  # (None, seq_len, d_model)
+        k = self.wk(k)  # (None, seq_len, d_model)
+        v = self.wv(v)  # (None, seq_len, d_model)
+        # split d_model into num_heads * depth
+        seq_len, d_model = q.shape[1], q.shape[2]
+        q = split_heads(q, seq_len, self.num_heads, q.shape[2] // self.num_heads)  # (None, num_heads, seq_len, depth)
+        k = split_heads(k, seq_len, self.num_heads, k.shape[2] // self.num_heads)  # (None, num_heads, seq_len, depth)
+        v = split_heads(v, seq_len, self.num_heads, v.shape[2] // self.num_heads)  # (None, num_heads, seq_len, depth)
+        # mask
+        mask = tf.tile(tf.expand_dims(mask, axis=1), [1, self.num_heads, 1, 1])  # (None, num_heads, seq_len, 1)
+        # attention
+        scaled_attention = scaled_dot_product_attention(q, k, v, mask)  # (None, num_heads, seq_len, d_model // num_heads)
+        # reshape
+        outputs = tf.reshape(tf.transpose(scaled_attention, [0, 2, 1, 3]), [-1, seq_len, d_model])  # (None, seq_len, d_model)
+        return outputs
 
 class Dice(Layer):
     def __init__(self):
