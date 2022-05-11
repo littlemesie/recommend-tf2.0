@@ -10,7 +10,7 @@ import tensorflow as tf
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Dense, Embedding, Input
 from tensorflow.keras.regularizers import l2
-from ctr.layers.modules import AttentionLayer
+from ctr.layers.modules import MultiHeadAttention
 
 
 
@@ -37,7 +37,7 @@ class AutoInt(Model):
         }
 
         # attention layer
-        self.attention_layer = AttentionLayer(att_hidden_units, att_activation)
+        self.attention_layer = MultiHeadAttention(head_size=att_hidden_units, activation=att_activation)
 
         self.final_dense = Dense(1, activation=None)
 
@@ -47,16 +47,11 @@ class AutoInt(Model):
                                   for i in range(sparse_inputs.shape[1])], axis=-1)
         x = tf.concat([sparse_embed, dense_inputs], axis=-1)
         # attention
-        attention_fea = self.attention_layer([x, x, x, None])
-
-
-        # Wide
-        wide_out = self.linear(dense_inputs)
-        # Deep
-        deep_out = self.dnn_network(x)
-        deep_out = self.final_dense(deep_out)
+        attention_out = self.attention_layer(x)
+        attention_out = tf.reshape(attention_out, shape=[-1, attention_out.shape[1] * attention_out.shape[2]])
         # out
-        outputs = tf.nn.sigmoid(0.5 * wide_out + 0.5 * deep_out)
+        outputs = self.final_dense(attention_out)
+        outputs = tf.nn.sigmoid(outputs)
         return outputs
 
     def build_graph(self, **kwargs):
