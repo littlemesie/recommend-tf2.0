@@ -10,18 +10,19 @@ import tensorflow as tf
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Embedding, Dense, BatchNormalization, Input, PReLU, Dropout
 from tensorflow.keras.regularizers import l2
-from ctr.layers.modules import AttentionLayer, Dice
+from ctr.layers.modules import Dice
+from ctr.layers.modules import MultiHeadAttention
 
 
 class DIN(Model):
-    def __init__(self, sparse_feature_dict, sparse_feature_index, att_hidden_units=(80, 40),
+    def __init__(self, sparse_feature_dict, sparse_feature_index, att_hidden_units=64,
                  ffn_hidden_units=(80, 40), att_activation='prelu', ffn_activation='prelu', maxlen=10, dnn_dropout=0.,
-                 embed_reg=1e-4):
+                 att_l2_reg=1e-4, embed_reg=1e-4):
         """
         DIN
         :param sparse_feature_dict: A dict. sparse_feature_columns
         :param sparse_feature_index: A dict.  sparse_feature_index
-        :param att_hidden_units: A tuple or list. Attention hidden units.
+        :param att_hidden_units: A scalar. Attention hidden units.
         :param ffn_hidden_units: A tuple or list. Hidden units list of FFN.
         :param att_activation: A String. The activation of attention.
         :param ffn_activation: A String. Prelu or Dice.
@@ -30,6 +31,7 @@ class DIN(Model):
         :param embed_reg: A scalar. The regularizer of embedding.
         """
         super(DIN, self).__init__()
+        self.att_l2_reg = l2(att_l2_reg)
         self.maxlen = maxlen
         self.sparse_feature_dict = sparse_feature_dict
         self.user_sparse_feature_index, self.item_sparse_feature_index, self.behavior_feature_index = sparse_feature_index
@@ -43,7 +45,7 @@ class DIN(Model):
         }
 
         # attention layer
-        self.attention_layer = AttentionLayer(att_hidden_units, att_activation)
+        self.attention_layer = MultiHeadAttention(head_size=att_hidden_units, activation=att_activation)
 
         self.bn = BatchNormalization(trainable=True)
         # ffn
@@ -55,8 +57,7 @@ class DIN(Model):
     def call(self, inputs, **kwargs):
 
         user_dense_input, user_sparse_input, item_dense_input, item_sparse_input, behavior_input = inputs
-        print(behavior_input)
-        print(self.user_sparse_feature_index)
+
         # user embed
         user_embeddings = tf.concat([self.embed_layers['embed_{}'.format(k)](user_sparse_input[:, v])
                                      for k, v in self.user_sparse_feature_index.items()], axis=-1)
@@ -66,17 +67,16 @@ class DIN(Model):
                                      for k, v in self.item_sparse_feature_index.items()], axis=-1)
         item_embed = tf.concat([item_sparse_input, item_embeddings], axis=-1)
 
-        # attention ---> mask
-        mask = tf.concat([behavior_input[:, i*3] for i in range(self.maxlen)], axis=-1)
-
         # behavior embed
         behavior_embed = tf.concat([self.embed_layers['embed_{}'.format(f"{k.split('_')[0]}_{k.split('_')[1]}_{k.split('_')[3]}")]
                            (behavior_input[:, v]) for k, v in self.behavior_feature_index.items()], axis=-1)
 
         behavior_embed = tf.reshape(behavior_embed, shape=(-1, self.maxlen, item_embeddings.shape[1]))
-
+        # item_embeds = tf.reshape(item_embeddings, shape=(-1, self.maxlen, item_embeddings.shape[1]))
         # att
-        att_outputs = self.attention_layer([item_embeddings, behavior_embed, behavior_embed, mask])
+        att_outputs = self.attention_layer(behavior_embed)
+        print(att_outputs)
+        att_outputs = tf.reshape(att_outputs, shape=(-1,  att_outputs.shape[2]))
 
         all_inputs = tf.concat([user_embed, item_embed, att_outputs], axis=-1)
 
@@ -89,17 +89,16 @@ class DIN(Model):
         all_inputs = self.dropout(all_inputs)
         #
         outputs = tf.nn.sigmoid(self.final_output(all_inputs))
-        print(outputs)
         # outputs = Dense(1, activation='sigmoid', name='output')(all_inputs)
         return outputs
 
     def build_graph(self, **kwargs):
-        user_dense_input = Input(shape=(5,))
-        user_sparse_input = Input(shape=(3,))
-        item_dense_input = Input(shape=(5,))
-        item_sparse_input = Input(shape=(3,))
-        behavior_input = Input(shape=(3*self.maxlen,))
-
-        model = Model(inputs=[user_dense_input, user_sparse_input, item_dense_input, item_sparse_input, behavior_input],
-                       outputs=self.call([user_dense_input, user_sparse_input, item_dense_input, item_sparse_input, behavior_input]))
+        user_dense_input = Input(shape=(5,), dtype=tf.float32)
+        user_sparse_input = Input(shape=(3,), dtype=tf.float32)
+        item_dense_input = Input(shape=(5,), dtype=tf.float32)
+        item_sparse_input = Input(shape=(3,), dtype=tf.float32)
+        behavior_input = Input(shape=(3 * self.maxlen, ), dtype=tf.float32)
+        model = Model(
+            inputs=[user_dense_input, user_sparse_input, item_dense_input, item_sparse_input, behavior_input],
+            outputs=self.call([user_dense_input, user_sparse_input, item_dense_input, item_sparse_input, behavior_input]))
         return model

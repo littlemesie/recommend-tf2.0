@@ -135,12 +135,11 @@ class DNN(Layer):
         return x
 
 class AttentionLayer(Layer):
-    def __init__(self, att_hidden_units, activation='prelu'):
+    def __init__(self, hidden_unit, activation='prelu'):
         """
         """
         super(AttentionLayer, self).__init__()
-        self.att_dense = [Dense(unit, activation=activation) for unit in att_hidden_units]
-        self.att_final_dense = Dense(1)
+        self.att_dense = Dense(hidden_unit, activation=activation)
 
     def call(self, inputs, **kwargs):
         # query: candidate item  (None, d * 2), d is the dimension of embedding
@@ -148,7 +147,6 @@ class AttentionLayer(Layer):
         # value: hist items  (None, seq_len, d * 2)
         # mask: (None, seq_len)
         q, k, v, mask = inputs
-
         q = tf.tile(q, multiples=[1, k.shape[1]])  # (None, seq_len * d * 2)
         q = tf.reshape(q, shape=[-1, k.shape[1], k.shape[2]])  # (None, seq_len, d * 2)
 
@@ -156,11 +154,9 @@ class AttentionLayer(Layer):
         info = tf.concat([q, k, q - k, q * k], axis=-1)
 
         # dense
-        for dense in self.att_dense:
-            info = dense(info)
+        outputs = self.att_dense(info)  # (None, seq_len, 1)
 
-        outputs = self.att_final_dense(info)  # (None, seq_len, 1)
-        outputs = tf.squeeze(outputs, axis=-1)  # (None, seq_len)
+        outputs = tf.reshape(outputs, shape=(-1, outputs.shape[1]))  # (None, seq_len)
 
         paddings = tf.ones_like(outputs) * (-2 ** 32 + 1)  # (None, seq_len)
         if isinstance(mask, tf.Tensor):
@@ -178,41 +174,155 @@ class AttentionLayer(Layer):
 
         return outputs
 
-
 class MultiHeadAttention(Layer):
-    def __init__(self, att_hidden_units, num_heads, activation='relu'):
-        """Multi Head Attention Mechanism.
-        Args:
-            :param att_hidden_units: A scalar. The self-attention hidden size.
-            :param num_heads: A scalar. Number of heads. If num_heads == 1, the layer is a single self-attention layer.
-            :param activation: A String. The activation of attention.
-        :return:
-        """
-        super(MultiHeadAttention, self).__init__()
-        self.d_model = att_hidden_units
-        self.num_heads = num_heads
 
-        self.wq = Dense(self.d_model, activation=activation)
-        self.wk = Dense(self.d_model, activation=activation)
-        self.wv = Dense(self.d_model, activation=activation)
+  def __init__(self, head_size, head_num=1, l2_reg=l2(1e-4), activation='relu', use_res=False, name=''):
+    """Initializes a `MultiHeadAttention` Layer.
 
-    def call(self,  inputs, **kwargs):
-        q, k, v, mask = inputs
-        q = self.wq(q)  # (None, seq_len, d_model)
-        k = self.wk(k)  # (None, seq_len, d_model)
-        v = self.wv(v)  # (None, seq_len, d_model)
-        # split d_model into num_heads * depth
-        seq_len, d_model = q.shape[1], q.shape[2]
-        q = split_heads(q, seq_len, self.num_heads, q.shape[2] // self.num_heads)  # (None, num_heads, seq_len, depth)
-        k = split_heads(k, seq_len, self.num_heads, k.shape[2] // self.num_heads)  # (None, num_heads, seq_len, depth)
-        v = split_heads(v, seq_len, self.num_heads, v.shape[2] // self.num_heads)  # (None, num_heads, seq_len, depth)
-        # mask
-        mask = tf.tile(tf.expand_dims(mask, axis=1), [1, self.num_heads, 1, 1])  # (None, num_heads, seq_len, 1)
-        # attention
-        scaled_attention = scaled_dot_product_attention(q, k, v, mask)  # (None, num_heads, seq_len, d_model // num_heads)
-        # reshape
-        outputs = tf.reshape(tf.transpose(scaled_attention, [0, 2, 1, 3]), [-1, seq_len, d_model])  # (None, seq_len, d_model)
-        return outputs
+    Args:
+      head_num: The number of heads
+      head_size: The dimension of a head
+      l2_reg: l2 regularizer
+      activation: A string. Activation function.
+      use_res: Whether to use residual connections before output.
+      name: scope of the MultiHeadAttention, so that the parameters could be separated from other MultiHeadAttention
+    """
+    super(MultiHeadAttention, self).__init__()
+    self._head_num = head_num
+    self._head_size = head_size
+    self._l2_reg = l2_reg
+    self._activation = activation
+    self._use_res = use_res
+    self._name = name
+
+  def _split_multihead_qkv(self, q, k, v):
+    """Split multiple heads.
+
+    Args:
+      q: Query matrix of shape [bs, feature_num, head_num * head_size].
+      k: Key matrix of shape [bs, feature_num, head_num * head_size].
+      v: Value matrix of shape [bs, feature_num, head_num * head_size].
+
+    Returns:
+      q: Query matrix of shape [bs, head_num, feature_num, head_size].
+      k: Key matrix of shape [bs, head_num, feature_num, head_size].
+      v: Value matrix of shape [bs, head_num, feature_num, head_size].
+    """
+    reshaped_q = tf.reshape(
+        q, shape=[-1, q.shape[1], self._head_num, self._head_size])
+    q = tf.transpose(reshaped_q, perm=[0, 2, 1, 3])
+    reshaped_k = tf.reshape(
+        k, shape=[-1, k.shape[1], self._head_num, self._head_size])
+    k = tf.transpose(reshaped_k, perm=[0, 2, 1, 3])
+    reshaped_v = tf.reshape(
+        v, shape=[-1, v.shape[1], self._head_num, self._head_size])
+    v = tf.transpose(reshaped_v, perm=[0, 2, 1, 3])
+    return q, k, v
+
+  def _scaled_dot_product_attention(self, q, k, v):
+    """Calculate scaled dot product attention by q, k and v.
+
+    Args:
+      q: Query matrix of shape [bs, head_num, feature_num, head_size].
+      k: Key matrix of shape [bs, head_num, feature_num, head_size].
+      v: Value matrix of shape [bs, head_num, feature_num, head_size].
+
+    Returns:
+      q: Query matrix of shape [bs, head_num, feature_num, head_size].
+      k: Key matrix of shape [bs, head_num, feature_num, head_size].
+      v: Value matrix of shape [bs, head_num, feature_num, head_size].
+    """
+    product = tf.linalg.matmul(
+        a=q, b=k, transpose_b=True) / (
+            self._head_size**-0.5)
+    weights = tf.nn.softmax(product)
+    out = tf.linalg.matmul(weights, v)
+    return out
+
+  def _compute_qkv(self, q, k, v):
+    """Calculate q, k and v matrices.
+
+    Args:
+      q: Query matrix of shape [bs, feature_num, d_model].
+      k: Key matrix of shape [bs, feature_num, d_model].
+      v: Value matrix of shape [bs, feature_num, d_model].
+
+    Returns:
+      q: Query matrix of shape [bs, feature_num, head_size * n_head].
+      k: Key matrix of shape [bs, feature_num, head_size * n_head].
+      v: Value matrix of shape [bs, feature_num, head_size * n_head].
+    """
+    q = Dense(
+        units=self._head_num * self._head_size,
+        use_bias=False,
+        kernel_regularizer=self._l2_reg,
+        activation=self._activation)(q)
+    k = Dense(
+        units=self._head_num * self._head_size,
+        use_bias=False,
+        kernel_regularizer=self._l2_reg,
+        activation=self._activation)(k)
+    v = Dense(
+        self._head_num * self._head_size,
+        use_bias=False,
+        kernel_regularizer=self._l2_reg,
+        activation=self._activation)(v)
+    return q, k, v
+
+  def _combine_heads(self, multi_head_tensor):
+    """Combine the results of multiple heads.
+
+    Args:
+      multi_head_tensor: Result matrix of shape [bs, head_num, feature_num, head_size].
+
+    Returns:
+      out: Result matrix of shape [bs, feature_num, head_num * head_size].
+    """
+    x = tf.transpose(multi_head_tensor, perm=[0, 2, 1, 3])
+    out = tf.reshape(x, shape=[-1, x.shape[1], x.shape[2] * x.shape[3]])
+    return out
+
+  def call(self, inputs, **kwargs):
+    """Build multiple heads attention layer.
+
+    Args:
+      attention_input: The input of interacting layer, has a shape of [bs, feature_num, d_model].
+
+    Returns:
+      out: The output of multi head attention layer, has a shape of [bs, feature_num, head_num * head_size].
+    """
+    if isinstance(inputs, list):
+      assert len(inputs) == 3 or len(inputs) == 1, \
+          'If the input of multi_head_attention is a list, the length must be 1 or 3.'
+
+      if len(inputs) == 3:
+        ori_q = inputs[0]
+        ori_k = inputs[1]
+        ori_v = inputs[2]
+      else:
+        ori_q = inputs[0]
+        ori_k = inputs[0]
+        ori_v = inputs[0]
+    else:
+      ori_q = inputs
+      ori_k = inputs
+      ori_v = inputs
+
+    q, k, v = self._compute_qkv(ori_q, ori_k, ori_v)
+    q, k, v = self._split_multihead_qkv(q, k, v)
+    multi_head_tensor = self._scaled_dot_product_attention(q, k, v)
+
+    out = self._combine_heads(multi_head_tensor)
+    if self._use_res:
+      W_0_x = Dense(
+          out.shape[2],
+          use_bias=False,
+          kernel_regularizer=self._l2_reg,
+          activation=self._activation)(ori_v)
+      res_out = tf.nn.relu(out + W_0_x)
+      return res_out
+    else:
+      return out
 
 class Dice(Layer):
     def __init__(self):

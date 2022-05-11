@@ -20,19 +20,19 @@ from ctr.utils.data_process import create_amazon_electronic_dataset
 
 import os
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-os.environ['CUDA_VISIBLE_DEVICES'] = '6'
+# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+# os.environ['CUDA_VISIBLE_DEVICES'] = '6'
 maxlen = 10
 
 embed_dim = 8
-att_hidden_units = [80, 40]
+att_hidden_units = 64
 ffn_hidden_units = [256, 128, 64]
 dnn_dropout = 0.5
 att_activation = 'sigmoid'
 ffn_activation = 'prelu'
 
 learning_rate = 0.001
-batch_size = 64
+batch_size = 32
 epochs = 5
 
 user_dense_feature_train = pd.DataFrame(np.random.random((10000, 5)),
@@ -103,10 +103,12 @@ with mirrored_strategy.scope():
     model.compile(loss=binary_crossentropy, optimizer=Adam(learning_rate=learning_rate),
                   metrics=[AUC()])
     model.run_eagerly = True
-model.fit([user_dense_feature_train, user_sparse_feature_train, item_dense_feature_train, item_sparse_feature_train, behavior_feature_train],
-            target_train,
-            epochs=epochs,
-            callbacks=[EarlyStopping(monitor='val_loss', patience=1, restore_best_weights=True)],  # checkpoint
-            validation_split=0,
-            batch_size=batch_size,
-          )
+
+model.fit(
+    [user_dense_feature_train, user_sparse_feature_train, item_dense_feature_train, item_sparse_feature_train, behavior_feature_train],
+    [target_train],
+    epochs=epochs,
+    callbacks=[EarlyStopping(monitor='val_loss', patience=1, restore_best_weights=True)],  # checkpoint
+    validation_split=0,
+    batch_size=batch_size,
+)

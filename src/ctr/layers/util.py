@@ -9,7 +9,7 @@
 import tensorflow as tf
 
 
-def scaled_dot_product_attention(q, k, v, mask):
+def scaled_dot_product_attention(q, k, v, mask=None):
     """Attention Mechanism Function.
     Args:
         :param q: A 3d/4d tensor with shape of (None, ..., seq_len, dim)
@@ -24,7 +24,10 @@ def scaled_dot_product_attention(q, k, v, mask):
     scaled_att_logits = mat_qk / tf.sqrt(dk)
 
     paddings = tf.ones_like(scaled_att_logits) * (-2 ** 32 + 1)  # (None, seq_len, seq_len)
-    outputs = tf.where(tf.equal(mask, tf.zeros_like(mask)), paddings, scaled_att_logits)  # (None, seq_len, seq_len)
+    if mask is not None:
+        outputs = tf.where(tf.equal(mask, tf.zeros_like(mask)), paddings, scaled_att_logits)  # (None, seq_len, seq_len)
+    else:
+        outputs = paddings
     # softmax
     outputs = tf.nn.softmax(logits=outputs)  # (None, seq_len, seq_len)
     outputs = tf.matmul(outputs, v)  # (None, seq_len, dim)
